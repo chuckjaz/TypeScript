@@ -1457,7 +1457,7 @@ namespace ts {
                     // - resolution was successfull
                     // - noResolve is falsy
                     // - module name come from the list fo imports
-                    const shouldAddFile = resolution 
+                    const shouldAddFile = resolution && 
                         !options.noResolve &&
                         i < file.imports.length;
 
