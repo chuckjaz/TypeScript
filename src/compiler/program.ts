@@ -54,11 +54,6 @@ namespace ts {
         return str.indexOf(suffix, expectedPos) === expectedPos;
     }
 
-    function nameStartsWithDotSlashOrDotDotSlash(name: string) {
-        const i = name.lastIndexOf("./", 1);
-        return i === 0 || (i === 1 && name.charCodeAt(0) === CharacterCodes.dot);
-    }
-
     function hasZeroOrOneAsteriskCharacter(str: string): boolean {
         let seenAsterisk = false;
         for (let i = 0; i < str.length; i++) {
@@ -80,7 +75,13 @@ namespace ts {
     }
 
     function moduleHasNonRelativeName(moduleName: string): boolean {
-        return !isRootedDiskPath(moduleName) && !nameStartsWithDotSlashOrDotDotSlash(moduleName);
+        if (isRootedDiskPath(moduleName)) {
+            return false;
+        }
+
+        const i = moduleName.lastIndexOf("./", 1);
+        const startsWithDotSlashOrDotDotSlash = i === 0 || (i === 1 && moduleName.charCodeAt(0) === CharacterCodes.dot);
+        return !startsWithDotSlashOrDotDotSlash;
     }
 
     interface ModuleResolutionState {
@@ -130,89 +131,83 @@ namespace ts {
         return result;
     }
 
-    // Path mapping based module resolution strategy uses base url to resolve non-absolute file names. This resolution strategy can be enabled 
-    // by setting 'moduleResolution' option to 'baseUrl' and as it implied by the name it uses base url to resolve module names.
-    // Base url can be specified:
-    //   - explicitly via command line option 'baseUrl'. If this value is relative it will be computed relative to current directory.
-    //   - explicitly in 'tsconfig.json' via 'baseUrl' compiler option. If this value is relative it will be computed relative to the location 
-    //     of 'tsconfig.json'.
-    //   - if value is not provided explicitly but project uses tsconfig.json then 'baseUrl' will be set of folder that contains 'tsconfig.json'
-    // If baseUrl is the only provided option then non-relative module names will be resolved relative to baseUrl. Relative module names
-    // will still be resolved relative to the folder that contains file with import.
-    // User can specify additional options in tsconfig.json to tweak module resolution.
-    // - 'paths' option allows to tune how non-relative module names will be resolved based on the content of the module name. 
-    // Structure of 'paths' compiler options
-    // 'paths': {
-    //    pattern-1: list of substitutions 1,
-    //    pattern-2: list of substitutions 2,
-    //    ...
-    //    pattern-n: list of substitutions-n
-    // }
-    // Pattern here is a string that can contain zero or one '*' character. During module resolution module name will be matched against 
-    // all patterns in the list. Matching for patterns that don't contain '*' means that module name must be equal to pattern respecting the case.
-    // If pattern contains '*' then to match pattern "<prefix>*<suffix>" module name must start with the <prefix> and end with <suffix>. 
-    // <MatchedStar> denotes part of the module name between <prefix> and <suffix>. 
-    // If module name can be matches with multiple patterns then pattern with the longest prefix will be picked.
-    // After selecting pattern we'll use list of substitutions to get candidate locations of the module and the try to load module from the candidate location. 
-    // Substitiution is a string that can contain zero or one '*'. To get candidate location from substitution we'll pick every substitution in the list 
-    // and replace '*' with <MatchedStar> string. If candidate location is not rooted it  will be converted to absolute using baseUrl.
-    // For example:
-    // baseUrl: /a/b/c
-    // "paths": {
-    //     // match all module names
-    //     "*": [ 
-    //         "*",        // use matched name as is,
-    //                     // <matched name> will be looked as /a/b/c/<matched name>
-    //
-    //         "folder1/*" // substitution will convert matched name to 'folder1/<matched name>',
-    //                     // since it is not rooted then final candidate location will be /a/b/c/folder1/<matched name> 
-    //     ],
-    //     // match module names that start with 'components/'
-    //     "components/*": [ "/root/components/*" ] // substitution will convert /components/folder1/<matched name> to '/root/components/folder1/<matched name>',
-    //                                              // it is rooted so it will be final candidate location
-    // }
-    // 'paths' allows to remap locations of non-relative module names. Relative module names usually are resolved relative to the folder
-    // that contains import. However sometimes it might  be useful to apply mappings to relative module names as well.
-    // Since the there might be different relative file names that refer to the same file we need to convert relative module name to non-relative 
-    // so we can just apply path mapping to it. This conversion can be performed using 'rootDirs' compiler option - this options stores list of root directories
-    // for the project (if root directory is not absolute it will be converted to absolute using baseUrl as a base path).
-    // First - we convert relative module name to absolute using location of file that contains import. 
-    // Then we try to find what element is rootDirs is the longest prefix for this absolute file name (respecting case):
-    //      <absoluteFileName> = <longestRootDir><suffix> 
-    // Once it is done - value of <suffix> is a be non-relative name for initially relative module name.
-    // Note that if element in rootDirs should always end with '/' so it will be appended automatically if value in configuration does not have it. 
-    // For example:
-    // baseUrl: /a/b/c
-    // "paths": {
-    //     "*": [ "*", "generated/*" ] // try to resolve module name as '/a/b/c/<name>' then look it in '/a/b/c/generated/<name>'
-    // }
-    // "rootDirs": [
-    //     "./src",      // root dir is project baseUrl/src
-    //     "./generated" // root dir is baseUrl/generated
-    //     "/e/f"        // root dir is /e/f 
-    // ]
-    // @file: /a/b/c/src/form1.ts
-    //     import {x} from "./form.content.ts"
-    // @file: /a/b/c/generated/form.content.ts
-    //     export var x = ...
-    // first './form.content.ts' needs to be converted to non-relative name.
-    // 1. convert it to absolute name '/a/b/c/src/form.content.ts' ->
-    //    find longest prefix in rootDirs that match this path, it will be './src' (after expansion '/a/b/c/src/') ->
-    //    suffix is form.content.ts
-    // 2. apply path mappings to 'form1.content.ts' ->
-    //    '*' pattern will be matched ->
-    //    '*' substitution yields '/a/b/c/form1.content.ts' - file does not exists
-    //    'generated/*' substitution yields '/a/b/c/generated/form1.content' - file exists - OK
-
+    /*
+     * Every module resolution kind can has its specific understanding how to load module from a specific path on disk
+     * I.e. for path '/a/b/c':
+     * - Node loader will first to try to check if '/a/b/c' points to a file with some supported extension and if this fails
+     * it will try to load module from directory: directory '/a/b/c' should exist and it should have either 'package.json' with
+     * 'typings' entry or file 'index' with some supported extension
+     * - Classic loader will only try to interpret '/a/b/c' as file.
+     */
     type ResolutionKindSpecificLoader = (candidate: string, extensions: string[], failedLookupLocations: string[], onlyRecordFalures: boolean, state: ModuleResolutionState) => string;
 
-    function tryLoadModuleUsingOptionalResolutionSettings(moduleName: string, containingDirectory: string, loader: ResolutionKindSpecificLoader, 
+    /**
+     * Any module resolution knid can be augmented with optional settings: 'baseUrl', 'paths' and 'rootDirs' - they are used to 
+     * mitigate differences between design time structure of the project and its runtime counterpart so the same import name 
+     * can be resolved successfully by TypeScript compiler and runtime module loader. 
+     * If these settings are set then loading procedure will try to use them to resolve module name and it can of failure it will
+     * fallback to standard resolution routine.
+     * 
+     * - baseUrl - this setting controls how non-relative module names are resolved. If this setting is specified then non-relative
+     * names will be resolved relative to baseUrl: i.e. if baseUrl is '/a/b' then canditate location to resolve module name 'c/d' will
+     * be '/a/b/c/d'
+     * - paths - this setting can only be used when baseUrl is specified. allows to tune how non-relative module names 
+     * will be resolved based on the content of the module name. 
+     * Structure of 'paths' compiler options
+     * 'paths': {
+     *    pattern-1: [...substitutions],
+     *    pattern-2: [...substitutions],
+     *    ...
+     *    pattern-n: [...substitutions]
+     * }
+     * Pattern here is a string that can contain zero or one '*' character. During module resolution module name will be matched against 
+     * all patterns in the list. Matching for patterns that don't contain '*' means that module name must be equal to pattern respecting the case.
+     * If pattern contains '*' then to match pattern "<prefix>*<suffix>" module name must start with the <prefix> and end with <suffix>. 
+     * <MatchedStar> denotes part of the module name between <prefix> and <suffix>. 
+     * If module name can be matches with multiple patterns then pattern with the longest prefix will be picked.
+     * After selecting pattern we'll use list of substitutions to get candidate locations of the module and the try to load module 
+     * from the candidate location. 
+     * Substitiution is a string that can contain zero or one '*'. To get candidate location from substitution we'll pick every 
+     * substitution in the list and replace '*' with <MatchedStar> string. If candidate location is not rooted it 
+     * will be converted to absolute using baseUrl.
+     * For example:
+     * baseUrl: /a/b/c
+     * "paths": {
+     *     // match all module names
+     *     "*": [ 
+     *         "*",        // use matched name as is,
+     *                     // <matched name> will be looked as /a/b/c/<matched name>
+     *
+     *         "folder1/*" // substitution will convert matched name to 'folder1/<matched name>',
+     *                     // since it is not rooted then final candidate location will be /a/b/c/folder1/<matched name> 
+     *     ],
+     *     // match module names that start with 'components/'
+     *     "components/*": [ "/root/components/*" ] // substitution will convert /components/folder1/<matched name> to '/root/components/folder1/<matched name>',
+     *                                              // it is rooted so it will be final candidate location
+     * }
+     *
+     * 'rootDirs' allows the project to be spreaded across multiple locations and resolve modules with relative names as if 
+     * they were in the same location. For example lets say there are two files
+     * '/local/src/content/file1.ts'
+     * '/shared/components/contracts/src/content/protocols/file2.ts'
+     * After bundling content of '/shared/components/contracts/src' will be merged with '/local/src' so 
+     * if file1 has the following import 'import {x} from "./protocols/file2"' it will be resolved successfully in runtime.
+     * 'rootDirs' provides the way to tell compiler that in order to get the whole project it should behave as if content of all
+     * root dirs were merged together.
+     * I.e. for the example above 'rootDirs' will have two entries: [ '/local/src', '/shared/components/contracts/src' ].
+     * Compiler wil first convert './protocols/file2' into absolute path relative to the location of containing file:
+     * '/local/src/content/protocols/file2' and try to load it - failure.
+     * Then it will search 'rootDirs' looking for a longest matching prefix of this absolute path and if such prefix is found - absolute path will
+     * be converted to a path relative to found rootDir entry './content/protocols/file2' (*). As a last step compiler will check all remainining
+     * entries in 'rootDirs', use them to build absolute path out of (*) and try to resolve module from this location.
+     */
+    function tryLoadModuleUsingOptionalResolutionSettings(moduleName: string, containingDirectory: string, loader: ResolutionKindSpecificLoader,
         failedLookupLocations: string[], supportedExtensions: string[], state: ModuleResolutionState): string {
-        
+
         if (moduleHasNonRelativeName(moduleName)) {
             return tryLoadModuleUsingBaseUrl(moduleName, loader, failedLookupLocations, supportedExtensions, state);
         }
-        else{
+        else {
             return tryLoadModuleUsingRootDirs(moduleName, containingDirectory, loader, failedLookupLocations, supportedExtensions, state);
         }
     }
@@ -225,7 +220,7 @@ namespace ts {
         }
 
         const candidate = normalizePath(combinePaths(containingDirectory, moduleName));
-        let resolvedFileName = loader(candidate, supportedExtensions, failedLookupLocations, !directoryProbablyExists(containingDirectory, state.host), state);
+        const resolvedFileName = loader(candidate, supportedExtensions, failedLookupLocations, !directoryProbablyExists(containingDirectory, state.host), state);
         if (resolvedFileName) {
             return resolvedFileName;
         }
@@ -234,6 +229,8 @@ namespace ts {
         let matchedNormalizedPrefix: string;
         for (const rootDir of state.compilerOptions.rootDirs) {
             // rootDirs are expected to be absolute
+            // in case of tsconfig.json this will happen automatically - compiler will expand relative names 
+            // using locaton of tsconfig.json as base location
             let normalizedRoot = normalizePath(rootDir);
             if (!endsWith(normalizedRoot, directorySeparator)) {
                 normalizedRoot += directorySeparator;
@@ -269,7 +266,7 @@ namespace ts {
         return undefined;
     }
 
-    function tryLoadModuleUsingBaseUrl(moduleName: string, loader: ResolutionKindSpecificLoader, failedLookupLocations: string[], 
+    function tryLoadModuleUsingBaseUrl(moduleName: string, loader: ResolutionKindSpecificLoader, failedLookupLocations: string[],
         supportedExtensions: string[], state: ModuleResolutionState): string {
 
         if (!state.compilerOptions.baseUrl) {
@@ -347,7 +344,7 @@ namespace ts {
 
         const failedLookupLocations: string[] = [];
         const state = {compilerOptions, host, traceEnabled};
-        let resolvedFileName = tryLoadModuleUsingOptionalResolutionSettings(moduleName, containingDirectory, nodeLoadModuleByRelativeName, 
+        let resolvedFileName = tryLoadModuleUsingOptionalResolutionSettings(moduleName, containingDirectory, nodeLoadModuleByRelativeName,
             failedLookupLocations, supportedExtensions, state);
 
         if (resolvedFileName) {
@@ -378,7 +375,7 @@ namespace ts {
 
         const resolvedFileName = loadModuleFromFile(candidate, supportedExtensions, failedLookupLocations, onlyRecordFailures, state);
 
-        return resolvedFileName || loadNodeModuleFromDirectory(supportedExtensions, candidate, failedLookupLocations, onlyRecordFailures, state); 
+        return resolvedFileName || loadNodeModuleFromDirectory(supportedExtensions, candidate, failedLookupLocations, onlyRecordFailures, state);
     }
 
     /* @internal */
@@ -498,8 +495,8 @@ namespace ts {
         const failedLookupLocations: string[] = [];
         const supportedExtensions = getSupportedExtensions(compilerOptions);
         let containingDirectory = getDirectoryPath(containingFile);
-        
-        const resolvedFileName = tryLoadModuleUsingOptionalResolutionSettings(moduleName, containingDirectory, loadModuleFromFile, failedLookupLocations, supportedExtensions, state);            
+
+        const resolvedFileName = tryLoadModuleUsingOptionalResolutionSettings(moduleName, containingDirectory, loadModuleFromFile, failedLookupLocations, supportedExtensions, state);
         if (resolvedFileName) {
             return createResolvedModule(resolvedFileName, /*isExternalLibraryImport*/false, failedLookupLocations);
         }
@@ -516,7 +513,7 @@ namespace ts {
         while (true) {
             const searchName = normalizePath(combinePaths(containingDirectory, moduleName));
             const directoryName = getDirectoryPath(searchName);
-            referencedSourceFile = loadModuleFromFile(searchName, supportedExtensions, failedLookupLocations, !directoryProbablyExists(directoryName, host), state)
+            referencedSourceFile = loadModuleFromFile(searchName, supportedExtensions, failedLookupLocations, !directoryProbablyExists(directoryName, host), state);
             if (referencedSourceFile) {
                 break;
             }
@@ -1457,7 +1454,7 @@ namespace ts {
                     // - resolution was successfull
                     // - noResolve is falsy
                     // - module name come from the list fo imports
-                    const shouldAddFile = resolution && 
+                    const shouldAddFile = resolution &&
                         !options.noResolve &&
                         i < file.imports.length;
 
