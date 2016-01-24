@@ -219,6 +219,10 @@ namespace ts {
             return undefined;
         }
 
+        if (state.traceEnabled) {
+            trace(state.host, Diagnostics.rootDirs_option_is_set_using_it_to_resolve_relative_module_name_0, moduleName);
+        }
+
         const candidate = normalizePath(combinePaths(containingDirectory, moduleName));
         const resolvedFileName = loader(candidate, supportedExtensions, failedLookupLocations, !directoryProbablyExists(containingDirectory, state.host), state);
         if (resolvedFileName) {
@@ -249,6 +253,9 @@ namespace ts {
             }
         }
         if (matchedNormalizedPrefix) {
+            if (state.traceEnabled) {
+                trace(state.host, Diagnostics.Longest_matching_prefix_for_0_is_1, candidate, matchedNormalizedPrefix);
+            }
             const suffix = candidate.substr(matchedNormalizedPrefix.length);
             for (const rootDir of state.compilerOptions.rootDirs) {
                 if (rootDir === matchedRootDir) {
@@ -256,6 +263,9 @@ namespace ts {
                     continue;
                 }
                 const candidate = combinePaths(normalizePath(rootDir), suffix);
+                if (state.traceEnabled) {
+                    trace(state.host, Diagnostics.Loading_0_from_the_root_dir_1_candidate_location_2, suffix, rootDir, candidate);
+                }
                 const baseDirectory = getDirectoryPath(candidate);
                 const resolvedFileName = loader(candidate, supportedExtensions, failedLookupLocations, !directoryProbablyExists(baseDirectory, state.host), state);
                 if (resolvedFileName) {
@@ -271,6 +281,9 @@ namespace ts {
 
         if (!state.compilerOptions.baseUrl) {
             return undefined;
+        }
+        if (state.traceEnabled) {
+            trace(state.host, Diagnostics.baseUrl_option_is_set_to_0_using_this_value_to_resolve_non_relative_module_name_1, state.compilerOptions.baseUrl, moduleName);
         }
 
         let longestMatchPrefixLength = -1;
