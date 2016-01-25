@@ -142,7 +142,7 @@ namespace ts {
     type ResolutionKindSpecificLoader = (candidate: string, extensions: string[], failedLookupLocations: string[], onlyRecordFalures: boolean, state: ModuleResolutionState) => string;
 
     /**
-     * Any module resolution knid can be augmented with optional settings: 'baseUrl', 'paths' and 'rootDirs' - they are used to 
+     * Any module resolution kind can be augmented with optional settings: 'baseUrl', 'paths' and 'rootDirs' - they are used to 
      * mitigate differences between design time structure of the project and its runtime counterpart so the same import name 
      * can be resolved successfully by TypeScript compiler and runtime module loader. 
      * If these settings are set then loading procedure will try to use them to resolve module name and it can of failure it will
@@ -224,10 +224,6 @@ namespace ts {
         }
 
         const candidate = normalizePath(combinePaths(containingDirectory, moduleName));
-        const resolvedFileName = loader(candidate, supportedExtensions, failedLookupLocations, !directoryProbablyExists(containingDirectory, state.host), state);
-        if (resolvedFileName) {
-            return resolvedFileName;
-        }
 
         let matchedRootDir: string;
         let matchedNormalizedPrefix: string;
@@ -257,6 +253,20 @@ namespace ts {
                 trace(state.host, Diagnostics.Longest_matching_prefix_for_0_is_1, candidate, matchedNormalizedPrefix);
             }
             const suffix = candidate.substr(matchedNormalizedPrefix.length);
+
+            // first - try to load from a initial location
+            if (state.traceEnabled) {
+                trace(state.host, Diagnostics.Loading_0_from_the_root_dir_1_candidate_location_2, suffix, matchedNormalizedPrefix, candidate);
+            }
+            const resolvedFileName = loader(candidate, supportedExtensions, failedLookupLocations, !directoryProbablyExists(containingDirectory, state.host), state);
+            if (resolvedFileName) {
+                return resolvedFileName;
+            }
+
+            if (state.traceEnabled) {
+                trace(state.host, Diagnostics.Trying_other_entries_in_rootDirs);
+            }
+            // then try to resolve using remaining entries in rootDirs
             for (const rootDir of state.compilerOptions.rootDirs) {
                 if (rootDir === matchedRootDir) {
                     // skip the initially matched entry 
@@ -271,6 +281,9 @@ namespace ts {
                 if (resolvedFileName) {
                     return resolvedFileName;
                 }
+            }
+            if (state.traceEnabled) {
+                trace(state.host, Diagnostics.Module_resolution_using_rootDirs_has_failed);
             }
         }
         return undefined;
