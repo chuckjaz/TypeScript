@@ -1022,13 +1022,19 @@ namespace Harness {
                 useCaseSensitiveFileNames,
                 currentDirectory,
                 options.newLine);
+
+            let traceResults: string[];
+            if (options.traceModuleResolution) {
+                traceResults = [];
+                compilerHost.trace = text => traceResults.push(text);
+            }
             const program = ts.createProgram(programFileNames, options, compilerHost);
 
             const emitResult = program.emit();
 
             const errors = ts.getPreEmitDiagnostics(program);
 
-            const result = new CompilerResult(fileOutputs, errors, program, Harness.IO.getCurrentDirectory(), emitResult.sourceMaps);
+            const result = new CompilerResult(fileOutputs, errors, program, Harness.IO.getCurrentDirectory(), emitResult.sourceMaps, traceResults);
             return { result, options };
         }
 
@@ -1309,7 +1315,7 @@ namespace Harness {
 
             /** @param fileResults an array of strings for the fileName and an ITextWriter with its code */
             constructor(fileResults: GeneratedFile[], errors: ts.Diagnostic[], public program: ts.Program,
-                public currentDirectoryForProgram: string, private sourceMapData: ts.SourceMapData[]) {
+                public currentDirectoryForProgram: string, private sourceMapData: ts.SourceMapData[], public traceResults: string[]) {
 
                 for (const emittedFile of fileResults) {
                     if (isDTS(emittedFile.fileName)) {

@@ -1,4 +1,5 @@
 // @module: amd
+// @traceModuleResolution: true
 
 // paths should error in the absence of baseurl
 

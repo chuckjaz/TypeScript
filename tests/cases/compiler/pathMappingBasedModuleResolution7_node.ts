@@ -1,4 +1,5 @@
 // @module: commonjs
+// @traceModuleResolution: true
 
 // @filename: c:/root/src/tsconfig.json
 {

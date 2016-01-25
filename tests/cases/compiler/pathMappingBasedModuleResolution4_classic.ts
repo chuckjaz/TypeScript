@@ -1,5 +1,6 @@
 // @moduleResolution: classic
 // @module: amd
+// @traceModuleResolution: true
 
 // baseUrl set via command line
 

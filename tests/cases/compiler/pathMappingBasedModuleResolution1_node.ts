@@ -1,4 +1,5 @@
 // @module: commonjs
+// @traceModuleResolution: true
 
 // paths should error in the absence of baseurl
 // @filename: c:/root/tsconfig.json
