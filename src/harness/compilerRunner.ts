@@ -145,7 +145,7 @@ class CompilerBaselineRunner extends RunnerBase {
                         return JSON.stringify(result.traceResults || [], undefined, 4);
                     });
                 }
-            })
+            });
 
             // Source maps?
             it("Correct sourcemap content for " + fileName, () => {
