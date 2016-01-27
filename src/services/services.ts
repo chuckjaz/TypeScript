@@ -5,6 +5,7 @@
 /// <reference path='navigateTo.ts' />
 /// <reference path='navigationBar.ts' />
 /// <reference path='patternMatcher.ts' />
+/// <reference path='plugins.ts' />
 /// <reference path='signatureHelp.ts' />
 /// <reference path='utilities.ts' />
 /// <reference path='formatting\formatting.ts' />
@@ -7499,7 +7500,7 @@ namespace ts {
             }
         }
 
-        return {
+        let service: LanguageService = {
             dispose,
             cleanupSemanticCache,
             getSyntacticDiagnostics,
@@ -7537,6 +7538,78 @@ namespace ts {
             getSourceFile,
             getProgram
         };
+        
+        var plugins = host.getPlugins && host.getPlugins(service);
+        if (plugins && plugins.length) {
+            function wrap<T extends Function>(name: string, method: T): T { 
+                let overrides = plugins
+                    .map(plugin => ({plugin, f: <Function>(<any>plugin)[name]}))
+                    .filter(p => !!p.f);
+                let filters = plugins
+                    .map(plugin => ({plugin, f: <Function>(<any>plugin)["+" + name]}))
+                    .filter(p => !!p.f);
+                if (overrides.length || filter.length) {
+                    return <T><any>function() {
+                        for (let p of overrides) {
+                            let result = p.f.apply(p.plugin, arguments);
+                            if (result) {
+                                return result;
+                            }
+                        }
+                        let result = method.apply(this, arguments);
+                        for (let p of filters) {
+                            let args = Array.prototype.slice.call(arguments, 0);
+                            args.push(result);
+                            let r = p.f.apply(p.plugin, args);
+                            if (r)
+                                result = r; 
+                        }
+                        return result;
+                    } 
+                }
+                return method;
+            }
+            service = {
+                dispose,
+                cleanupSemanticCache,
+                getSyntacticDiagnostics: wrap("getSyntacticDiagnostics", getSyntacticDiagnostics),
+                getSemanticDiagnostics: wrap("getSemanticDiagnostics", getSemanticDiagnostics),
+                getCompilerOptionsDiagnostics: wrap("getCompilerOptionsDiagnostics", getCompilerOptionsDiagnostics),
+                getSyntacticClassifications: wrap("getSyntacticClassifications", getSyntacticClassifications),
+                getSemanticClassifications: wrap("getSemanticClassifications", getSemanticClassifications),
+                getEncodedSyntacticClassifications: wrap("getEncodedSyntacticClassifications", getEncodedSyntacticClassifications),
+                getEncodedSemanticClassifications: wrap("getEncodedSemanticClassifications", getEncodedSemanticClassifications),
+                getCompletionsAtPosition: wrap("getCompletionsAtPosition", getCompletionsAtPosition),
+                getCompletionEntryDetails: wrap("getCompletionEntryDetails", getCompletionEntryDetails),
+                getSignatureHelpItems: wrap("getSignatureHelpItems", getSignatureHelpItems),
+                getQuickInfoAtPosition: wrap("getQuickInfoAtPosition", getQuickInfoAtPosition),
+                getDefinitionAtPosition: wrap("getDefinitionAtPosition", getDefinitionAtPosition),
+                getTypeDefinitionAtPosition: wrap("getTypeDefinitionAtPosition", getTypeDefinitionAtPosition),
+                getReferencesAtPosition: wrap("getReferencesAtPosition", getReferencesAtPosition),
+                findReferences: wrap("findReferences", findReferences),
+                getOccurrencesAtPosition: wrap("getOccurrencesAtPosition", getOccurrencesAtPosition),
+                getDocumentHighlights: wrap("getDocumentHighlights", getDocumentHighlights),
+                getNameOrDottedNameSpan: wrap("getNameOrDottedNameSpan", getNameOrDottedNameSpan),
+                getBreakpointStatementAtPosition: wrap("getBreakpointStatementAtPosition", getBreakpointStatementAtPosition),
+                getNavigateToItems: wrap("getNavigateToItems", getNavigateToItems),
+                getRenameInfo: wrap("getRenameInfo", getRenameInfo),
+                findRenameLocations: wrap("findRenameLocations", findRenameLocations),
+                getNavigationBarItems: wrap("getNavigationBarItems", getNavigationBarItems),
+                getOutliningSpans: wrap("getOutliningSpans", getOutliningSpans),
+                getTodoComments: wrap("getTodoComments", getTodoComments),
+                getBraceMatchingAtPosition: wrap("getBraceMatchingAtPosition", getBraceMatchingAtPosition),
+                getIndentationAtPosition: wrap("getIndentationAtPosition", getIndentationAtPosition),
+                getFormattingEditsForRange: wrap("getFormattingEditsForRange", getFormattingEditsForRange),
+                getFormattingEditsForDocument: wrap("getFormattingEditsForDocument", getFormattingEditsForDocument),
+                getFormattingEditsAfterKeystroke: wrap("getFormattingEditsAfterKeystroke", getFormattingEditsAfterKeystroke),
+                getDocCommentTemplateAtPosition: wrap("getDocCommentTemplateAtPosition", getDocCommentTemplateAtPosition),
+                getEmitOutput,
+                getSourceFile,
+                getProgram
+            }
+        }
+        
+        return service;
     }
 
     /* @internal */
