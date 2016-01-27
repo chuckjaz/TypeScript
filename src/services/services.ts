@@ -7538,34 +7538,34 @@ namespace ts {
             getSourceFile,
             getProgram
         };
-        
-        var plugins = host.getPlugins && host.getPlugins(service);
+
+        const plugins = host.getPlugins && host.getPlugins(service);
         if (plugins && plugins.length) {
-            function wrap<T extends Function>(name: string, method: T): T { 
-                let overrides = plugins
+            function wrap<T extends Function>(name: string, method: T): T {
+                const overrides = plugins
                     .map(plugin => ({plugin, f: <Function>(<any>plugin)[name]}))
                     .filter(p => !!p.f);
-                let filters = plugins
+                const filters = plugins
                     .map(plugin => ({plugin, f: <Function>(<any>plugin)["+" + name]}))
                     .filter(p => !!p.f);
                 if (overrides.length || filter.length) {
                     return <T><any>function() {
-                        for (let p of overrides) {
-                            let result = p.f.apply(p.plugin, arguments);
+                        for (const p of overrides) {
+                            const result = p.f.apply(p.plugin, arguments);
                             if (result) {
                                 return result;
                             }
                         }
                         let result = method.apply(this, arguments);
-                        for (let p of filters) {
-                            let args = Array.prototype.slice.call(arguments, 0);
+                        for (const p of filters) {
+                            const args = Array.prototype.slice.call(arguments, 0);
                             args.push(result);
-                            let r = p.f.apply(p.plugin, args);
+                            const r = p.f.apply(p.plugin, args);
                             if (r)
-                                result = r; 
+                                result = r;
                         }
                         return result;
-                    } 
+                    };
                 }
                 return method;
             }
@@ -7606,9 +7606,9 @@ namespace ts {
                 getEmitOutput,
                 getSourceFile,
                 getProgram
-            }
+            };
         }
-        
+
         return service;
     }
 
