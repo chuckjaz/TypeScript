@@ -7547,7 +7547,7 @@ namespace ts {
                     .map(plugin => ({plugin, f: <Function>(<any>plugin)[name]}))
                     .filter(p => !!p.f);
                 const filters = plugins
-                    .map(plugin => ({plugin, f: <Function>(<any>plugin)["+" + name]}))
+                    .map(plugin => ({plugin, f: <Function>(<any>plugin)[name + "Filter"]}))
                     .filter(p => !!p.f);
                 if (overrides.length || filter.length) {
                     return <T><any>function() {
