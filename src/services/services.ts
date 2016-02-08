@@ -2676,6 +2676,15 @@ namespace ts {
         }
     }
 
+    /* BEGIN: Temporary Hack for testing */
+    // These are provided by the host, not registered globally.
+    type PluginFactory = (service: LanguageService, host: LanguageServiceHost, registry: DocumentRegistry) => LanguageServicePlugin;
+    const pluginFactories: PluginFactory[] = [];
+    export function registerPluginFactory(factory: (service: LanguageService, host: LanguageServiceHost, registry: DocumentRegistry) => LanguageServicePlugin): void {
+       pluginFactories.push(factory);
+    }
+    /* END: Temporary Hack for testing */
+
     export function createLanguageService(host: LanguageServiceHost,
         documentRegistry: DocumentRegistry = createDocumentRegistry(host.useCaseSensitiveFileNames && host.useCaseSensitiveFileNames(), host.getCurrentDirectory())): LanguageService {
 
@@ -7540,7 +7549,12 @@ namespace ts {
             getProgram
         };
 
-        const plugins = host.getPlugins && host.getPlugins(service);
+        let plugins = host.getPlugins && host.getPlugins(service);
+        // BEGIN: Hack for testing
+        if (pluginFactories.length) {
+           plugins = (plugins || []).concat(pluginFactories.map(f => f(service, host, documentRegistry)));
+        }
+        // END: Hack for testing
         if (plugins && plugins.length) {
             function wrap<T extends Function>(name: string, method: T): T {
                 const overrides = plugins

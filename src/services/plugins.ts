@@ -22,7 +22,7 @@ namespace ts {
         getEncodedSyntacticClassifications?(fileName: string, span: TextSpan): Classifications;
         getEncodedSemanticClassifications?(fileName: string, span: TextSpan): Classifications;
         getCompletionsAtPosition?(fileName: string, position: number): CompletionInfo;
-        getCompletionEntryDetails?(fileName: string, position: number, entryName: string): CompletionEntryDetails;        
+        getCompletionEntryDetails?(fileName: string, position: number, entryName: string): CompletionEntryDetails;
         getQuickInfoAtPosition?(fileName: string, position: number): QuickInfo;
         getNameOrDottedNameSpan?(fileName: string, startPos: number, endPos: number): TextSpan;
         getBreakpointStatementAtPosition?(fileName: string, position: number): TextSpan;
@@ -63,7 +63,7 @@ namespace ts {
         getEncodedSyntacticClassificationsFilter?(fileName: string, span: TextSpan, previous: Classifications): Classifications;
         getEncodedSemanticClassificationsFilter?(fileName: string, span: TextSpan, previous: Classifications): Classifications;
         getCompletionsAtPositionFilter?(fileName: string, position: number, previous: CompletionInfo): CompletionInfo;
-        getCompletionEntryDetailsFilter?(fileName: string, position: number, entryName: string, previous: CompletionEntryDetails): CompletionEntryDetails;        
+        getCompletionEntryDetailsFilter?(fileName: string, position: number, entryName: string, previous: CompletionEntryDetails): CompletionEntryDetails;
         getQuickInfoAtPositionFilter?(fileName: string, position: number, previous: QuickInfo): QuickInfo;
         getNameOrDottedNameSpanFilter?(fileName: string, startPos: number, endPos: number, previous: TextSpan): TextSpan;
         getBreakpointStatementAtPositionFilter?(fileName: string, position: number, previous: TextSpan): TextSpan;
@@ -100,6 +100,6 @@ namespace ts {
     // service would return for the call being overriden. It also guarentees not to cause indirect
     // recursion involving the plugin.
     export interface LanguageServicePluginFactory {
-        create(service: LanguageService, registry: DocumentRegistry): LanguageServicePlugin;
+        create(host: LanguageServiceHost, service: LanguageService, registry: DocumentRegistry): LanguageServicePlugin;
     }
 }
