@@ -2683,6 +2683,7 @@ namespace ts {
     export function registerPluginFactory(factory: (service: LanguageService, host: LanguageServiceHost, registry: DocumentRegistry) => LanguageServicePlugin): void {
        pluginFactories.push(factory);
     }
+    let creatingPlugins = false;
     /* END: Temporary Hack for testing */
 
     export function createLanguageService(host: LanguageServiceHost,
@@ -7551,8 +7552,10 @@ namespace ts {
 
         let plugins = host.getPlugins && host.getPlugins(service);
         // BEGIN: Hack for testing
-        if (pluginFactories.length) {
+        if (!creatingPlugins && pluginFactories.length) {
+           creatingPlugins = true;
            plugins = (plugins || []).concat(pluginFactories.map(f => f(service, host, documentRegistry)));
+           creatingPlugins = false;
         }
         // END: Hack for testing
         if (plugins && plugins.length) {

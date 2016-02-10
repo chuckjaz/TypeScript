@@ -73,6 +73,7 @@ var servicesSources = [
     "navigateTo.ts",
     "navigationBar.ts",
     "outliningElementsCollector.ts",
+    "ng-plugin.ts",
     "patternMatcher.ts",
     "services.ts",
     "shims.ts",
