@@ -2,8 +2,20 @@
 /// <reference path="services.ts"/>
 
 namespace ts {
+
+    // LanguageServicePlugin is an interface that plugins can implement to replace, filter, or augment
+    // results returned by the TypeScript language service to the language service host.
+
     export interface LanguageServicePlugin {
         // Overrides
+
+        // A plugin can implement one of the override methods to replace the results that would
+        // be returned by the TypeScript language service. If a plugin returns a defined results
+        // (that is, is not undefined) then that result is used instead of invoking the
+        // corresponding TypeScript method. If multiple plugins are registered, they are
+        // consulted in the order they are returned from the host. The first defined result
+        // returned by a plugin is used and no other plugin overrides are consulted.
+
         getOptionsDiagnostics?(): Diagnostic[];
         getSyntacticDiagnostics?(fileName: string): Diagnostic[];
         getSemanticDiagnostics?(fileName: string): Diagnostic[];
@@ -35,6 +47,16 @@ namespace ts {
         getSourceFile?(fileName: string): SourceFile;
 
         // Filters
+
+        // A plugin can implement one of the filter methods to augment, extend or modify a result
+        // prior to the host receiving it. The TypeScript language service is invoked and the
+        // result is passed to the plugin as the value of the previous parameter. If more than one
+        // plugin is registered, the plugins are consulted in the order they are returned from the
+        // host. The value passed in as previous is the result returned by the prior plugin. If a
+        // plugin returns undefined, the result passed in as previous is used and the undefined
+        // result is ignored. All plugins are consulted before the result is returned to the host.
+        // If a plugin overrides behavior of the method, no filter methods are consulted.
+
         getOptionsDiagnosticsFilter?(previous: Diagnostic[]): Diagnostic[];
         getSyntacticDiagnosticsFilter?(fileName: string, previous: Diagnostic[]): Diagnostic[];
         getSemanticDiagnosticsFilter?(fileName: string, previous: Diagnostic[]): Diagnostic[];
@@ -66,10 +88,17 @@ namespace ts {
         getSourceFileFilter?(fileName: string, previous: SourceFile): SourceFile;
     }
 
+    // The LanguageServiceHost interface is extended to allow a host to supply a list of plugins
+    // to be consulted.
     export interface LanguageServiceHost {
         getPlugins?(service: LanguageService): LanguageServicePlugin[];
     }
 
+    // A factory used by the host to create the plugins retuned by getPlugins(). The service
+    // instance passed into the factory will not consult plugins before producing a result and,
+    // therefore, can be used to determine what an unaugmented version of the TypeScript language
+    // service would return for the call being overriden. It also guarentees not to cause indirect
+    // recursion involving the plugin.
     export interface LanguageServicePluginFactory {
         create(service: LanguageService, registry: DocumentRegistry): LanguageServicePlugin;
     }
