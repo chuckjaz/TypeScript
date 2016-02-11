@@ -39,11 +39,7 @@ namespace ng {
             let createProxy = (host: ts.LanguageServiceHost): ts.LanguageServiceHost => {
                 var result: ts.LanguageServiceHost = {
                     getCompilationSettings: () => host.getCompilationSettings(),
-                    getScriptFileNames: () => {
-                        // Add a generated file for every .js file.
-                        var names = host.getScriptFileNames();
-                        return names.concat(names.map(name => 'x.' + name));
-                    },
+                    getScriptFileNames: () => host.getScriptFileNames(),
                     getScriptVersion: fileName => host.getScriptVersion(fileName),
                     getScriptSnapshot: fileName => {
                         const generatedText = this.generatedFiles[fileName];
@@ -54,9 +50,8 @@ namespace ng {
                         });
                         if (generatedText) {
                             return snapString(generatedText);
-                        } else if (fileName.startsWith('x,')) {
-                            return snapString('');
                         }
+                        return host.getScriptSnapshot(fileName);
                     },
                     getCurrentDirectory: () => host.getCurrentDirectory(),
                     getDefaultLibFileName: options => host.getDefaultLibFileName(options)          
@@ -82,7 +77,9 @@ namespace ng {
                 return result;
             }
 
-            this.ngmlService = ts.createLanguageService(createProxy(host), registry);
+            let localRegistry = ts.createDocumentRegistry();
+
+            this.ngmlService = ts.createLanguageService(createProxy(host), localRegistry);
         }
         
         // Implementation of ts.LanguageServicePlugin
@@ -139,7 +136,7 @@ namespace ng {
 					let templateStrings = getNgTemplateStringsInSourceFile(sourceFile);
 
                     const {generatedFile, mappingFuncs, sourceText} = that.getGeneratedFile(sourceFile, templateStrings);
-                    const generatedFileName = 'x.' + fileName; 
+                    const generatedFileName = fileName;
                     that.generatedFiles[generatedFileName] = sourceText;
                     that.generation++;
                     // mapPosFromTemplateToGeneratedCode expects the original position, not the pos
