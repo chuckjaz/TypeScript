@@ -8,25 +8,32 @@ interface String {
 }
 
 namespace ng {
-    interface MappingFuncs {
+    interface Mapping {
         isPosInTemplate(pos: number): boolean;
         isPosInGeneratedCode(pos: number): boolean;
         mapPosFromTemplateToGeneratedCode(pos: number): number;
         mapPosFromGeneratedCodeToTemplate(pos: number): number;
     }
-    
+
     interface ngTemplateNode {
         templateString: ts.Node;
         classDecl: ts.Node;
     }
-   
+
     interface Map<Value> {
        [index: string]: Value; 
     }
 
+    interface GenerationCacheEntry {
+        source: string;
+        basedOnVersion: string;
+        mapping: Mapping;
+    }
+
     class NgPlugin implements ts.LanguageServicePlugin {
         private ngmlService: ts.LanguageService;
-        private generatedFiles: Map<string> = {};
+        private cacheVersion: string;
+        private generatedFiles: Map<GenerationCacheEntry> = {};
         private generation: number = 0;
              
         constructor(
@@ -42,14 +49,14 @@ namespace ng {
                     getScriptFileNames: () => host.getScriptFileNames(),
                     getScriptVersion: fileName => host.getScriptVersion(fileName),
                     getScriptSnapshot: fileName => {
-                        const generatedText = this.generatedFiles[fileName];
+                        const generatedFile = this.generatedFiles[fileName];
                         const snapString = (s: string): ts.IScriptSnapshot => ({
                             getText: (start, end) => s.substring(start, end),
                             getLength: () => s.length,
                             getChangeRange: () => undefined                            
                         });
-                        if (generatedText) {
-                            return snapString(generatedText);
+                        if (generatedFile) {
+                            return snapString(generatedFile.source);
                         }
                         return host.getScriptSnapshot(fileName);
                     },
@@ -92,9 +99,14 @@ namespace ng {
             if (!getTemplateAtPosition(templatesInFile, position)) {
                 return undefined;
             }
-            
-            return this.getNgTemplateCompletionsAtPosition(fileName, position, 
+
+            return this.getNgTemplateCompletionsAtPosition(fileName, position,
                 (fileName, pos) => this.ngmlService.getCompletionsAtPosition(fileName, pos));
+        }
+
+        getCompletionEntryDetails(fileName: string, position: number, entryName: string) {
+            return this.fromGeneratedFile(fileName, position,
+                (fileName, position) => this.ngmlService.getCompletionEntryDetails(fileName, position, entryName));
         }
         
         // Private implementation methods
@@ -102,7 +114,35 @@ namespace ng {
         private getCurrentProgram(): ts.Program {
             return this.tsService.getProgram();
         }
-        
+
+        private fromGeneratedFile<T>(fileName: string, position: number,
+            callback: (fileName: string, position: number) => T): T {
+            let sourceFile = this.getValidSourceFile(fileName);
+
+            // Does it contain an Angular template at the position requested?
+            let templatesInFile = getNgTemplateStringsInSourceFile(sourceFile);
+            if (!getTemplateAtPosition(templatesInFile, position))
+                return undefined;
+
+            // Generate the file if it hasn't been generated or the generated
+            // version is out of date.
+            let generatedFileInfo = this.generatedFiles[fileName];
+            if (generatedFileInfo) {
+                if (sourceFile.version != generatedFileInfo.basedOnVersion)
+                    generatedFileInfo = undefined;
+            }
+            if (!generatedFileInfo) {
+                const {generatedFile, mapping, sourceText} = this.getGeneratedFile(sourceFile, templatesInFile);
+                generatedFileInfo = {source: sourceText, mapping, basedOnVersion: sourceFile.version};
+                this.generatedFiles[fileName] = generatedFileInfo;
+                this.generation++;
+            }
+
+            // Find the position generated in the source for the requested position in the template.
+            const generatedPos = generatedFileInfo.mapping.mapPosFromTemplateToGeneratedCode(position);
+            return callback(fileName, generatedPos);
+        }
+
         private getNgTemplateCompletionsAtPosition(fileName: string, position: number,
             queryGeneratedCode: (fileName: string, pos: number) => ts.CompletionInfo): ts.CompletionInfo {
             // This function should:
@@ -132,17 +172,10 @@ namespace ng {
 
             function getExpressionCompletions(text: string, pos: number){
                 if(isAfterDot(text, pos)){
-                    let sourceFile = that.getValidSourceFile(fileName);
-					let templateStrings = getNgTemplateStringsInSourceFile(sourceFile);
-
-                    const {generatedFile, mappingFuncs, sourceText} = that.getGeneratedFile(sourceFile, templateStrings);
-                    const generatedFileName = fileName;
-                    that.generatedFiles[generatedFileName] = sourceText;
-                    that.generation++;
-                    // mapPosFromTemplateToGeneratedCode expects the original position, not the pos
-                    // passed into getExpressionCompletions()
-                    const generatedPos = mappingFuncs.mapPosFromTemplateToGeneratedCode(position);
-                    const result = queryGeneratedCode(generatedFileName, generatedPos);
+                    // We use position instead of pos because the pos passed in is just
+                    // meant to be used for isAfterDot. fromGeneratedFile() requires the
+                    // original position.
+                    const result = that.fromGeneratedFile(fileName, position, queryGeneratedCode);
                     if (result) {
                         return result.entries;
                     }
@@ -243,11 +276,15 @@ namespace ng {
             }
             return result;
         }        
-        
-        private getValidSourceFile(fileName: string): ts.SourceFile {
-            fileName = ts.normalizeSlashes(fileName);
+
+        private normalizeName(fileName: string): string {
+            let normalName = ts.normalizeSlashes(fileName);
             let getCanonicalFileName = ts.createGetCanonicalFileName(/* useCaseSensitivefileNames */ false);
-            let sourceFile = this.getCurrentProgram().getSourceFile(getCanonicalFileName(fileName));
+            return getCanonicalFileName(normalName);
+        }
+
+        private getValidSourceFile(fileName: string): ts.SourceFile {
+            let sourceFile = this.getCurrentProgram().getSourceFile(this.normalizeName(fileName));
             if (!sourceFile) {
                 throw new Error("Could not find file: '" + fileName + "'.");
             }
@@ -277,7 +314,7 @@ namespace ng {
             let endNewText = insertionPoint + generatedFunc.length + 2;
             let newSourceFile = ts.createSourceFile(originalFile.fileName, newText, originalFile.languageVersion, true);
 
-            let mappingFuncs: MappingFuncs = {
+            let mapping: Mapping = {
                 isPosInTemplate: (position) => position > ngTemplate.templateString.getStart() && position < ngTemplate.templateString.getEnd(),
                 isPosInGeneratedCode: (position) => position > insertionPoint && position < endNewText,
                 mapPosFromGeneratedCodeToTemplate: (position) => {
@@ -307,7 +344,7 @@ namespace ng {
                 }
             };
 
-            return {generatedFile: newSourceFile, mappingFuncs, sourceText: newText};
+            return {generatedFile: newSourceFile, mapping, sourceText: newText};
         }        
     }
     
