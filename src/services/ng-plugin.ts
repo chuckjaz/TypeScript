@@ -109,6 +109,39 @@ namespace ng {
                 (fileName, position) => this.ngmlService.getCompletionEntryDetails(fileName, position, entryName));
         }
         
+        getSyntacticDiagnosticsFilter(fileName: string, previous: ts.Diagnostic[]): ts.Diagnostic[] {
+            let result: ts.Diagnostic[] = [];
+            let sourceFile = this.getValidSourceFile(fileName);
+
+            getNgTemplateStringsInSourceFile(sourceFile).forEach( elem => {
+                let text = elem.templateString.getText();
+                text = text.substring(1, text.length - 1);
+                addTemplateErrors(text, elem.templateString.getStart() + 1);
+            });
+
+            function addTemplateErrors(text: string, offset: number){
+                let parser = new NgTemplateParser(text);
+                parser.errors.forEach( err => {
+                    let parts = err.split(':');
+                    // TODO: Change the errors in the parser to match expected Diagnostic fields
+                    let diag: ts.Diagnostic = {
+                        file: sourceFile,
+                        start: parseInt(parts[1]) + offset,
+                        length: parseInt(parts[2]) - parseInt(parts[1]),
+                        messageText: parts[3].trim(),
+                        category: ts.DiagnosticCategory.Warning,
+                        code: 1
+                    }
+                    result.push(diag);
+                });
+            }
+
+            if (result.length) {
+                return previous.concat(result);
+            }
+            return undefined
+        }
+
         // Private implementation methods
         
         private getCurrentProgram(): ts.Program {
