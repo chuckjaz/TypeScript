@@ -143,14 +143,28 @@ namespace ng {
         }
 
         getQuickInfoAtPosition(fileName: string, position: number): ts.QuickInfo {
-            return this.fromGeneratedFile(fileName, position, (fileName, position) => {
+            return this.fromGeneratedFile(fileName, position, (fileName, position, mapping) => {
                const result = this.ngmlService.getQuickInfoAtPosition(fileName, position);
-               const info = this.generatedFiles[fileName];
-               if (info && info.mapping.isPosInGeneratedCode(result.textSpan.start)) {
-                   result.textSpan.start = info.mapping.mapPosFromGeneratedCodeToTemplate(result.textSpan.start);
+               if (result && mapping.isPosInGeneratedCode(result.textSpan.start)) {
+                   result.textSpan.start = mapping.mapPosFromGeneratedCodeToTemplate(result.textSpan.start);
                }
                return result;
             });
+        }
+
+       getDefinitionAtPosition(fileName: string, position: number): ts.DefinitionInfo[] {
+           return this.fromGeneratedFile(fileName, position, (fileName, position, mapping) => {
+                const result = this.ngmlService.getDefinitionAtPosition(fileName, position);
+                if (result) {
+                    result.forEach(definition => {
+                        const startPos = definition.textSpan.start;
+                        if (definition.fileName === fileName && mapping.isPosInGeneratedCode(startPos)) {
+                            definition.textSpan.start = mapping.mapPosFromGeneratedCodeToTemplate(startPos);
+                        }
+                    });
+                }
+                return result;
+           });
         }
 
         // Private implementation methods
@@ -160,7 +174,7 @@ namespace ng {
         }
 
         private fromGeneratedFile<T>(fileName: string, position: number,
-            callback: (fileName: string, position: number) => T): T {
+            callback: (fileName: string, position: number, mapping: Mapping) => T): T {
             let sourceFile = this.getValidSourceFile(fileName);
 
             // Does it contain an Angular template at the position requested?
@@ -184,7 +198,7 @@ namespace ng {
 
             // Find the position generated in the source for the requested position in the template.
             const generatedPos = generatedFileInfo.mapping.mapPosFromTemplateToGeneratedCode(position);
-            return callback(fileName, generatedPos);
+            return callback(fileName, generatedPos, generatedFileInfo.mapping);
         }
 
         private getNgTemplateCompletionsAtPosition(fileName: string, position: number,
