@@ -167,6 +167,19 @@ namespace ng {
            });
         }
 
+        getSignatureHelpItems(fileName: string, position: number): ts.SignatureHelpItems{
+            return this.fromGeneratedFile(fileName, position, (fileName, position, mapping) => {
+               const result = this.ngmlService.getSignatureHelpItems(fileName, position);
+               if (result) {
+                   const startPos = result.applicableSpan.start;
+                   if (mapping.isPosInGeneratedCode(startPos)) {
+                       result.applicableSpan.start = mapping.mapPosFromGeneratedCodeToTemplate(startPos);
+                   }
+               }
+               return result;
+            });
+        }
+
         // Private implementation methods
 
         private getCurrentProgram(): ts.Program {
