@@ -142,8 +142,19 @@ namespace ng {
             return undefined
         }
 
+        getQuickInfoAtPosition(fileName: string, position: number): ts.QuickInfo {
+            return this.fromGeneratedFile(fileName, position, (fileName, position) => {
+               const result = this.ngmlService.getQuickInfoAtPosition(fileName, position);
+               const info = this.generatedFiles[fileName];
+               if (info && info.mapping.isPosInGeneratedCode(result.textSpan.start)) {
+                   result.textSpan.start = info.mapping.mapPosFromGeneratedCodeToTemplate(result.textSpan.start);
+               }
+               return result;
+            });
+        }
+
         // Private implementation methods
-        
+
         private getCurrentProgram(): ts.Program {
             return this.tsService.getProgram();
         }
