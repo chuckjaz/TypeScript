@@ -7548,7 +7548,7 @@ namespace ts {
                 const filters = plugins
                     .map(plugin => ({plugin, f: <Function>(<any>plugin)[name + "Filter"]}))
                     .filter(p => !!p.f);
-                if (overrides.length || filter.length) {
+                if (overrides.length || filters.length) {
                     return <T><any>function() {
                         for (const p of overrides) {
                             const result = p.f.apply(p.plugin, arguments);

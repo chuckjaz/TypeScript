@@ -100,6 +100,6 @@ namespace ts {
     // service would return for the call being overriden. It also guarentees not to cause indirect
     // recursion involving the plugin.
     export interface LanguageServicePluginFactory {
-        create(service: LanguageService, registry: DocumentRegistry): LanguageServicePlugin;
+        create(service: LanguageService, host: LanguageServiceHost, registry: DocumentRegistry, typescript: typeof ts): LanguageServicePlugin;
     }
 }
