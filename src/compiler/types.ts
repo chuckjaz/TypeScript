@@ -2240,6 +2240,17 @@ namespace ts {
         isOptionalParameter(node: ParameterDeclaration): boolean;
         getAmbientModules(): Symbol[];
 
+        getAnyType(): Type;
+        getUndefinedType(): Type;
+        getNullType(): Type;
+        getStringType(): Type;
+        getNumberType(): Type;
+        getBooleanType(): Type;
+        getUnionType(types: Type[]): Type;
+        createArrayType(elementType: Type): Type;
+        isTypeAssignableTo(source: Type, target: Type): boolean;
+        resolveSignature(signatures: Signature[], typeArguments: Type[], arguments: Type[], candidatesOutArray?: Signature[]): Signature;
+
         // Should not be called directly.  Should only be accessed through the Program instance.
         /* @internal */ getDiagnostics(sourceFile?: SourceFile, cancellationToken?: CancellationToken): Diagnostic[];
         /* @internal */ getGlobalDiagnostics(): Diagnostic[];

@@ -105,6 +105,19 @@ namespace ts {
             getExportsOfModule: getExportsOfModuleAsArray,
             getAmbientModules,
 
+            getAnyType: () => anyType,
+            getUndefinedType: () => undefinedType,
+            getBooleanType: () => booleanType,
+            getNullType: () => nullType,
+            getNumberType: () => numberType,
+            getStringType: () => stringType,
+            createArrayType,
+            getUnionType,
+            isTypeAssignableTo,
+
+            // TODO: Provide a real implementation
+            resolveSignature: (signatures: Signature[], _typeArguments: Type[], _arguments: Type[]) => signatures[0],
+
             getJsxElementAttributesType,
             getJsxIntrinsicTagNames,
             isOptionalParameter
